@@ -4,11 +4,13 @@ import feedparser
 from pytrends.request import TrendReq
 from bs4 import BeautifulSoup
 import os
+from datetime import datetime
 
 # --- 1. CONFIGURATION & DESIGN ---
 st.set_page_config(page_title="Auto News Command", layout="wide", page_icon="🚙")
 
-# Custom CSS to replicate the "Card" look from your design
+# Custom CSS to replicate the "Card" look
+# FIXED: Added 'color: #333333' to force dark text on white cards
 st.markdown("""
 <style>
     .news-card {
@@ -18,15 +20,20 @@ st.markdown("""
         border: 1px solid #e0e0e0;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
         margin-bottom: 20px;
-        height: 100%;
+        color: #333333; 
     }
     .source-tag {
         background-color: #f0f2f6;
+        color: #333333;
         padding: 4px 8px;
         border-radius: 4px;
         font-size: 0.8rem;
         font-weight: 600;
-        color: #555;
+    }
+    .time-tag {
+        float: right;
+        color: #888;
+        font-size: 0.8rem;
     }
     .news-title {
         font-size: 1.1rem;
@@ -38,7 +45,7 @@ st.markdown("""
     }
     .news-summary {
         font-size: 0.9rem;
-        color: #666;
+        color: #555555;
         display: -webkit-box;
         -webkit-line-clamp: 3;
         -webkit-box-orient: vertical;
@@ -51,6 +58,19 @@ st.markdown("""
         text-decoration: none;
         font-weight: 600;
         font-size: 0.9rem;
+    }
+    /* Social Card Specifics */
+    .social-card {
+        background: #ffffff;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        border: 1px solid #eee;
+        color: #333333; /* Forces black text */
+    }
+    .social-card a {
+        color: #0068c9;
+        text-decoration: none;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -71,9 +91,18 @@ def save_source(category, name, url):
     df.to_csv("sources.csv", index=False)
 
 def clean_summary(html_text):
-    # Removes HTML tags from RSS summary to show clean text
+    if not html_text: return ""
     soup = BeautifulSoup(html_text, "lxml")
     return soup.get_text()[:150] + "..."
+
+def get_time(entry):
+    # Tries to find published date, otherwise uses current time
+    if hasattr(entry, 'published'):
+        return entry.published[:16] # Truncate to keep it short (e.g., "Tue, 15 Jan 2026")
+    elif hasattr(entry, 'updated'):
+        return entry.updated[:16]
+    else:
+        return "Just Now"
 
 def fetch_feed_data(sources_df):
     news_items = []
@@ -87,7 +116,7 @@ def fetch_feed_data(sources_df):
                     "Title": entry.title,
                     "Link": entry.link,
                     "Summary": clean_summary(summary),
-                    "Time": entry.published if 'published' in entry else "Today"
+                    "Time": get_time(entry)
                 })
         except:
             continue
@@ -98,29 +127,27 @@ def fetch_feed_data(sources_df):
 st.title("🚙 Auto News Command")
 st.caption("Real-time Automotive Intelligence System")
 
-# Tabs for distinct sections
+# Tabs
 tab_india, tab_global, tab_social, tab_trends = st.tabs([
     "🇮🇳 Indian News", "🌍 Global News", "📱 Social Wall", "📈 Market Intelligence"
 ])
 
-# LOAD DATA
 df_sources = load_sources()
 
 # --- TAB 1: INDIAN NEWS ---
 with tab_india:
     if st.button("🔄 Refresh India News"):
-        # Filter for Indian sources only
         indian_sources = df_sources[df_sources["Category"] == "Indian News"]
         news_data = fetch_feed_data(indian_sources)
         
-        # Grid Layout (3 Columns)
         cols = st.columns(3)
         for i, item in enumerate(news_data):
-            with cols[i % 3]: # Distribute cards across 3 columns
+            with cols[i % 3]:
                 st.markdown(f"""
                 <div class="news-card">
                     <span class="source-tag">{item['Source']}</span>
-                    <div class="news-title"><a href="{item['Link']}" target="_blank" style="text-decoration:none; color:black;">{item['Title']}</a></div>
+                    <span class="time-tag">🕒 {item['Time']}</span>
+                    <div class="news-title"><a href="{item['Link']}" target="_blank" style="text-decoration:none; color:#1f1f1f;">{item['Title']}</a></div>
                     <div class="news-summary">{item['Summary']}</div>
                     <a href="{item['Link']}" target="_blank" class="read-btn">Read Article ↗</a>
                 </div>
@@ -138,7 +165,8 @@ with tab_global:
                 st.markdown(f"""
                 <div class="news-card">
                     <span class="source-tag">{item['Source']}</span>
-                    <div class="news-title"><a href="{item['Link']}" target="_blank" style="text-decoration:none; color:black;">{item['Title']}</a></div>
+                    <span class="time-tag">🕒 {item['Time']}</span>
+                    <div class="news-title"><a href="{item['Link']}" target="_blank" style="text-decoration:none; color:#1f1f1f;">{item['Title']}</a></div>
                     <div class="news-summary">{item['Summary']}</div>
                     <a href="{item['Link']}" target="_blank" class="read-btn">Read Article ↗</a>
                 </div>
@@ -149,7 +177,6 @@ with tab_social:
     st.info("Tip: Use RSS Bridge links for Twitter and Instagram sources.")
     col1, col2, col3, col4 = st.columns(4)
     
-    # Helper to display social columns
     def render_social_col(column, category_name, icon):
         with column:
             st.markdown(f"### {icon} {category_name}")
@@ -159,11 +186,13 @@ with tab_social:
                     try:
                         feed = feedparser.parse(row["URL"])
                         for entry in feed.entries[:3]:
+                            timestamp = get_time(entry)
+                            # FIXED: Using 'social-card' class to ensure black text
                             st.markdown(f"""
-                            <div style="background:#fff; padding:10px; border-radius:8px; margin-bottom:10px; border:1px solid #eee;">
-                                <small><b>{row['Name']}</b></small><br>
-                                {entry.title}<br>
-                                <a href="{entry.link}" style="font-size:0.8rem;">View Post</a>
+                            <div class="social-card">
+                                <small style="color:#666;"><b>{row['Name']}</b> • {timestamp}</small><br>
+                                <div style="margin-top:5px; font-weight:500;">{entry.title}</div>
+                                <div style="margin-top:8px;"><a href="{entry.link}" target="_blank">View Post ↗</a></div>
                             </div>
                             """, unsafe_allow_html=True)
                     except:
@@ -185,27 +214,21 @@ with tab_trends:
             kw_list = ["Car", "EV", "SUV"]
             
             c1, c2, c3 = st.columns(3)
-            
             with c1:
                 st.write("**🇮🇳 India**")
                 pytrends.build_payload(kw_list, cat=47, timeframe='now 7-d', geo='IN')
-                data = pytrends.interest_over_time()
-                st.line_chart(data[kw_list])
-
+                st.line_chart(pytrends.interest_over_time()[kw_list])
             with c2:
                 st.write("**🇺🇸 USA**")
                 pytrends.build_payload(kw_list, cat=47, timeframe='now 7-d', geo='US')
-                data = pytrends.interest_over_time()
-                st.line_chart(data[kw_list])
-                
+                st.line_chart(pytrends.interest_over_time()[kw_list])
             with c3:
                 st.write("**🇬🇧 UK**")
                 pytrends.build_payload(kw_list, cat=47, timeframe='now 7-d', geo='GB')
-                data = pytrends.interest_over_time()
-                st.line_chart(data[kw_list])
+                st.line_chart(pytrends.interest_over_time()[kw_list])
 
         except Exception as e:
-            st.warning("Google Trends is currently blocking automated requests (429 Error). This is common with public IPs. Try again in 10 minutes.")
+            st.warning("Google Trends is busy. Try again in 10 minutes.")
 
 # --- SIDEBAR: MANAGE FEEDS ---
 with st.sidebar:
@@ -219,7 +242,7 @@ with st.sidebar:
             
             if submitted and s_name and s_url:
                 save_source(s_cat, s_name, s_url)
-                st.success("Added! Refresh the app to see it.")
+                st.success("Added! Refresh app.")
     
     st.write("---")
     st.write("**Current Sources:**")
