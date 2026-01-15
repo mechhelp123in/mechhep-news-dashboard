@@ -1,12 +1,10 @@
 import streamlit as st
 import pandas as pd
 import feedparser
-from pytrends.request import TrendReq
 from bs4 import BeautifulSoup
 import os
 from datetime import datetime
 import time
-import random
 
 # --- 1. CONFIGURATION & PAGE SETUP ---
 st.set_page_config(page_title="Auto News Command", layout="wide", page_icon="🏎️")
@@ -19,7 +17,6 @@ if 'last_updated' not in st.session_state: st.session_state['last_updated'] = "W
 # --- 2. PREMIUM CSS DESIGN ---
 st.markdown("""
 <style>
-    /* Global Font & Background */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
     
     html, body, [class*="css"] {
@@ -37,16 +34,28 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0,0,0,0.02);
         transition: all 0.3s ease;
         height: 100%;
-        position: relative;
     }
-    
     .news-card:hover {
         transform: translateY(-5px);
         box-shadow: 0 12px 24px rgba(0,0,0,0.08);
         border-color: #e0e0e0;
     }
 
-    /* TAGS */
+    /* TREND BLOCKS */
+    .trend-card {
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        padding: 30px;
+        border-radius: 15px;
+        border: 1px solid #e9ecef;
+        text-align: center;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        margin-bottom: 15px;
+    }
+    .trend-flag { font-size: 3rem; margin-bottom: 10px; display: block; }
+    .trend-title { font-size: 1.2rem; font-weight: 800; color: #333; margin-bottom: 5px; }
+    .trend-desc { font-size: 0.9rem; color: #666; margin-bottom: 20px; }
+
+    /* TAGS & BUTTONS */
     .source-badge {
         background-color: #e3f2fd;
         color: #1565c0;
@@ -54,39 +63,10 @@ st.markdown("""
         border-radius: 6px;
         font-size: 0.75rem;
         font-weight: 700;
-        letter-spacing: 0.5px;
         text-transform: uppercase;
     }
+    .time-badge { float: right; color: #757575; font-size: 0.8rem; font-weight: 500; }
     
-    .time-badge {
-        float: right;
-        color: #757575;
-        font-size: 0.8rem;
-        font-weight: 500;
-    }
-
-    /* TYPOGRAPHY */
-    .news-title {
-        font-size: 1.25rem;
-        font-weight: 800;
-        color: #111;
-        margin-top: 15px;
-        margin-bottom: 10px;
-        line-height: 1.4;
-    }
-    
-    .news-summary {
-        font-size: 0.95rem;
-        color: #555;
-        line-height: 1.6;
-        margin-bottom: 20px;
-        display: -webkit-box;
-        -webkit-line-clamp: 3;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-    }
-
-    /* BUTTONS */
     .read-button {
         display: inline-block;
         background-color: #111;
@@ -98,18 +78,13 @@ st.markdown("""
         text-decoration: none;
         transition: background 0.2s;
     }
-    
-    .read-button:hover {
-        background-color: #333;
-        text-decoration: none;
-    }
+    .read-button:hover { background-color: #333; }
 
-    /* SOCIAL CARDS COLOR CODING */
+    /* SOCIAL COLORS */
     .social-card-x { border-left: 4px solid #000; }
     .social-card-insta { border-left: 4px solid #E1306C; }
     .social-card-fb { border-left: 4px solid #1877F2; }
     .social-card-threads { border-left: 4px solid #333; }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -117,7 +92,6 @@ st.markdown("""
 
 def load_sources():
     if not os.path.exists("sources.csv"):
-        # Default Data
         data = {
             "Category": ["Indian News", "Indian News", "Global News", "Global News"],
             "Name": ["Autocar India", "Team-BHP", "Motor1", "CarScoops"],
@@ -178,22 +152,8 @@ def fetch_feed_data(category_filter):
     bar.empty()
     return items
 
-@st.cache_data(ttl=3600)
-def get_trends(geo):
-    try:
-        time.sleep(random.uniform(1, 2))
-        pytrends = TrendReq(hl='en-US', tz=360)
-        kw = ['Car', 'SUV', 'EV']
-        pytrends.build_payload(kw, cat=47, timeframe='now 7-d', geo=geo)
-        related = pytrends.related_queries()
-        for k in kw:
-            if related and k in related and related[k]['rising'] is not None:
-                return related[k]['rising'].head(5)
-    except: return None
-
 # --- 4. MAIN DASHBOARD UI ---
 
-# Header
 c1, c2 = st.columns([3, 1])
 with c1:
     st.title("🏎️ Auto News Command")
@@ -203,8 +163,7 @@ with c2:
 
 st.write("---")
 
-# Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["🇮🇳 Indian News", "🌍 Global News", "📱 Social Wall", "📈 Trends"])
+tab1, tab2, tab3, tab4 = st.tabs(["🇮🇳 Indian News", "🌍 Global News", "📱 Social Wall", "📈 Trends (Live)"])
 
 # TAB 1: INDIA
 with tab1:
@@ -219,10 +178,7 @@ with tab1:
             with cols[i % 3]:
                 st.markdown(f"""
                 <div class="news-card">
-                    <div>
-                        <span class="source-badge">{news['Source']}</span>
-                        <span class="time-badge">{news['Time']}</span>
-                    </div>
+                    <div><span class="source-badge">{news['Source']}</span><span class="time-badge">{news['Time']}</span></div>
                     <div class="news-title">{news['Title']}</div>
                     <div class="news-summary">{news['Summary']}</div>
                     <a href="{news['Link']}" target="_blank" class="read-button">Read Article ↗</a>
@@ -244,10 +200,7 @@ with tab2:
             with cols[i % 3]:
                 st.markdown(f"""
                 <div class="news-card">
-                    <div>
-                        <span class="source-badge">{news['Source']}</span>
-                        <span class="time-badge">{news['Time']}</span>
-                    </div>
+                    <div><span class="source-badge">{news['Source']}</span><span class="time-badge">{news['Time']}</span></div>
                     <div class="news-title">{news['Title']}</div>
                     <div class="news-summary">{news['Summary']}</div>
                     <a href="{news['Link']}" target="_blank" class="read-button">Read Article ↗</a>
@@ -256,7 +209,7 @@ with tab2:
 
 # TAB 3: SOCIAL
 with tab3:
-    st.caption("Aggregating RSS feeds from RSS-Bridge")
+    st.caption("Using RSS-Bridge for Social Media")
     df = load_sources()
     c1, c2, c3, c4 = st.columns(4)
 
@@ -284,26 +237,46 @@ with tab3:
     render_social_col(c3, "Facebook", "social-card-fb")
     render_social_col(c4, "Threads", "social-card-threads")
 
-# TAB 4: TRENDS
+# --- TAB 4: TRENDS (DIRECT LINKS) ---
 with tab4:
-    st.subheader("🔥 Top Rising Search Queries")
-    if st.button("📊 Scan Markets"):
-        c1, c2, c3 = st.columns(3)
-        
-        def show_trend(col, country, code):
-            with col:
-                st.markdown(f"**{country}**")
-                with st.spinner("Analyzing..."):
-                    df_t = get_trends(code)
-                    if df_t is not None:
-                        st.dataframe(df_t, hide_index=True, use_container_width=True)
-                    else:
-                        st.warning("Rate Limit Hit 🛑")
-                        st.markdown(f"[Open {country} Trends >](https://trends.google.com/trends/explore?geo={code}&q=Car)")
+    st.subheader("🔥 Live Google Trends Dashboard")
+    st.markdown("Direct access to the 'Trending Now' pages for the **Auto Category** (Real-time).")
+    
+    # 3 BLOCKS LAYOUT
+    t1, t2, t3 = st.columns(3)
 
-        show_trend(c1, "🇮🇳 India", "IN")
-        show_trend(c2, "🇺🇸 USA", "US")
-        show_trend(c3, "🇬🇧 UK", "GB")
+    # Category 47 = Autos & Vehicles (More accurate for you than Category 1)
+    # Using 'st.link_button' for clean, native redirection without blocks.
+    
+    with t1:
+        st.markdown("""
+        <div class="trend-card">
+            <span class="trend-flag">🇮🇳</span>
+            <div class="trend-title">India Trends</div>
+            <div class="trend-desc">Real-time Auto Search Data</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.link_button("🚀 Open India Trends", "https://trends.google.com/trending?geo=IN&hl=en-US&hours=168&category=47", use_container_width=True)
+
+    with t2:
+        st.markdown("""
+        <div class="trend-card">
+            <span class="trend-flag">🇺🇸</span>
+            <div class="trend-title">USA Trends</div>
+            <div class="trend-desc">Real-time Auto Search Data</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.link_button("🚀 Open USA Trends", "https://trends.google.com/trending?geo=US&hl=en-US&hours=168&category=47", use_container_width=True)
+
+    with t3:
+        st.markdown("""
+        <div class="trend-card">
+            <span class="trend-flag">🇬🇧</span>
+            <div class="trend-title">UK Trends</div>
+            <div class="trend-desc">Real-time Auto Search Data</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.link_button("🚀 Open UK Trends", "https://trends.google.com/trending?geo=GB&hl=en-US&hours=168&category=47", use_container_width=True)
 
 # SIDEBAR
 with st.sidebar:
